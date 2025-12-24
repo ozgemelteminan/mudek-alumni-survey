@@ -1,6 +1,3 @@
-"""
-LinkedIn Automation - FINAL STABLE VERSION
-"""
 import time
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -131,7 +128,7 @@ class LinkedInAutomation:
             try:
                 textbox = self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, SELECTORS["message_textbox"][0])))
             except:
-                self.handle_popups() # Son bir şans popup kontrolü
+                self.handle_popups() # popup kontrolü
                 try:
                     self.force_click(msg_btn) # Tekrar dene
                     time.sleep(2)
@@ -140,11 +137,8 @@ class LinkedInAutomation:
                     logger.error("❌ Sohbet kutusu açılmadı.")
                     return 'error'
 
-            # --- ADIM 3: YAZ VE GÖNDER (DÜZELTİLEN KISIM) ---
+            # --- ADIM 3: YAZ VE GÖNDER ---
             logger.info("Mesaj yazılıyor...")
-            
-            # Eski JS yöntemi yerine garantili 'send_keys' kullanıyoruz
-            # Bu sayede Gönder butonu aktifleşecek.
             textbox.clear()
             textbox.send_keys(message)
             time.sleep(1) 

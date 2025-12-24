@@ -1,14 +1,10 @@
-#!/usr/bin/env python3
-"""
-MÜDEK Alumni Survey - FULL AUTO (No Human Loop)
-"""
 import time
 import config
 from sheets_reader import GoogleSheetsReader
 from linkedin_automation import LinkedInAutomation
 
 def main():
-    print("\n🚀 OTOMATİK MOD BAŞLATILIYOR (SADECE BAĞLANTILAR İÇİN)...")
+    print("\n🚀 OTOMATİK MOD BAŞLATILIYOR...")
     
     # 1. Excel'i Oku
     sheets = GoogleSheetsReader()
@@ -48,7 +44,7 @@ def main():
             f"Sevgiler, Özge"
         )
 
-        # GÖNDER (Soru sormadan)
+        # GÖNDER 
         status = bot.send_message_fast(url, msg)
 
         if status == 'sent':
@@ -59,7 +55,7 @@ def main():
             print("❌ HATA")
 
         count += 1
-        # Her kişi arası 5 saniye bekle (Ban yememek için minimum süre)
+        # Her kişi arası 5 saniye bekle (Ban yememek için umduğum minimum süre)
         time.sleep(5) 
 
     bot.close()

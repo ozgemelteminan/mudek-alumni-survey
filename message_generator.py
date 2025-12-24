@@ -1,8 +1,3 @@
-"""
-Message template generation module for MÜDEK Alumni Survey System.
-Handles personalized message creation with dynamic variables.
-"""
-
 from typing import Dict, Optional
 from string import Template
 import config
@@ -11,11 +6,9 @@ from logger_utils import setup_logger
 logger = setup_logger(__name__)
 
 
-# =============================================================================
-# MESSAGE TEMPLATES
-# =============================================================================
+# ---------- MESAJ ŞABLONLARI ------------
 
-# Turkish formal template
+# Türkçe resmi şablon
 TEMPLATE_TR_FORMAL = """Sayın {name},
 
 {university} {faculty} {department} olarak, {graduation_year} yılı mezunlarımızla iletişime geçmekten büyük mutluluk duyuyoruz.
@@ -35,7 +28,7 @@ Saygılarımızla,
 {contact_email}"""
 
 
-# Turkish semi-formal template
+# Türkçe yarı resmi şablon (Daha samimi)
 TEMPLATE_TR_SEMIFORMAL = """Merhaba {name},
 
 {graduation_year} yılı mezunu olarak sizinle iletişime geçmek istedik.
@@ -51,7 +44,7 @@ Teşekkürler!
 {department}"""
 
 
-# English formal template
+# İngilizce resmi şablon 
 TEMPLATE_EN_FORMAL = """Dear {name},
 
 We are reaching out to you as a {graduation_year} graduate of {department}, {university}.
@@ -71,7 +64,7 @@ Best regards,
 {contact_email}"""
 
 
-# Template mapping
+# Şablon eşleşmeleri
 TEMPLATES = {
     "tr_formal": TEMPLATE_TR_FORMAL,
     "tr_semiformal": TEMPLATE_TR_SEMIFORMAL,
@@ -81,20 +74,20 @@ TEMPLATES = {
 
 class MessageGenerator:
     """
-    Generates personalized messages for alumni outreach.
+    Mezun iletişimi için kişiselleştirilmiş mesajlar oluşturur.
     """
     
     def __init__(self, template_key: str = "tr_formal"):
         """
-        Initialize the message generator.
+        Mesaj oluşturucuyu başlatır.
         
         Args:
-            template_key: Key for the template to use
+            template_key: Kullanılacak şablon anahtarı (örn: 'tr_formal')
         """
         self.template_key = template_key
         self.base_template = TEMPLATES.get(template_key, TEMPLATE_TR_FORMAL)
         
-        # Default placeholders from config
+        # Config dosyasından gelen varsayılan yer tutucular
         self.defaults = {
             "university": config.UNIVERSITY_NAME,
             "faculty": config.FACULTY_NAME,
@@ -106,27 +99,27 @@ class MessageGenerator:
     
     def generate(self, alumni: Dict, custom_template: Optional[str] = None) -> str:
         """
-        Generates a personalized message for an alumni.
+        Bir mezun için kişiselleştirilmiş mesaj metni üretir.
         
         Args:
-            alumni: Dictionary containing alumni data
-            custom_template: Optional custom template string
+            alumni: Mezun verilerini içeren sözlük
+            custom_template: (İsteğe bağlı) Özel şablon metni
             
         Returns:
-            Personalized message string
+            Kişiselleştirilmiş mesaj metni (str)
         """
         template = custom_template or self.base_template
         
-        # Merge defaults with alumni-specific data
+        # Varsayılanları kopyala
         placeholders = {**self.defaults}
         
-        # Add alumni-specific data
+        # Mezuna özel verileri ekle
         placeholders["name"] = alumni.get("name", "Değerli Mezunumuz")
         placeholders["graduation_year"] = alumni.get("graduation_year", "")
         placeholders["company"] = alumni.get("company", "şirketiniz")
         placeholders["position"] = alumni.get("position", "pozisyonunuz")
         
-        # Handle empty values gracefully
+        # Boş veriler için mantıklı varsayılanlar ata (Cümle akışını bozmamak için)
         if not placeholders["company"]:
             placeholders["company"] = "mevcut şirketiniz"
         if not placeholders["position"]:
@@ -136,30 +129,30 @@ class MessageGenerator:
         
         try:
             message = template.format(**placeholders)
-            logger.debug(f"Generated message for: {alumni.get('name', 'Unknown')}")
+            logger.debug(f"Mesaj oluşturuldu: {alumni.get('name', 'Bilinmiyor')}")
             return message
             
         except KeyError as e:
-            logger.error(f"Missing placeholder in template: {e}")
+            logger.error(f"Şablonda eksik yer tutucu (placeholder): {e}")
             raise
     
     def preview(self, alumni: Dict) -> str:
         """
-        Generates a preview of the message with formatting.
+        Mesajın önizlemesini formatlı bir şekilde oluşturur.
         
         Args:
-            alumni: Dictionary containing alumni data
+            alumni: Mezun verilerini içeren sözlük
             
         Returns:
-            Formatted preview string
+            Formatlanmış önizleme metni
         """
         message = self.generate(alumni)
         
         preview = f"""
 {'='*60}
-📧 MESSAGE PREVIEW
+📧 MESAJ ÖNİZLEME
 {'='*60}
-To: {alumni.get('name', 'Unknown')} ({alumni.get('linkedin_url', 'No URL')})
+Kime: {alumni.get('name', 'Bilinmiyor')} ({alumni.get('linkedin_url', 'URL Yok')})
 {'='*60}
 
 {message}
@@ -171,15 +164,15 @@ To: {alumni.get('name', 'Unknown')} ({alumni.get('linkedin_url', 'No URL')})
     @staticmethod
     def list_templates() -> Dict[str, str]:
         """
-        Returns available templates with descriptions.
+        Mevcut şablonları açıklamalarıyla birlikte döndürür.
         
         Returns:
-            Dictionary of template keys and descriptions
+            Şablon anahtarları ve açıklamaları sözlüğü
         """
         return {
-            "tr_formal": "Türkçe - Resmi üslup",
-            "tr_semiformal": "Türkçe - Yarı resmi üslup",
-            "en_formal": "English - Formal style"
+            "tr_formal": "Türkçe - Resmi üslup (Varsayılan)",
+            "tr_semiformal": "Türkçe - Yarı resmi / Samimi",
+            "en_formal": "İngilizce - Resmi üslup"
         }
 
 
@@ -189,15 +182,15 @@ def generate_personalized_message(
     custom_template: Optional[str] = None
 ) -> str:
     """
-    Convenience function to generate a personalized message.
+    Kişiselleştirilmiş mesaj oluşturmak için yardımcı (wrapper) fonksiyon.
     
     Args:
-        alumni: Alumni data dictionary
-        template_key: Template to use
-        custom_template: Optional custom template string
+        alumni: Mezun verisi
+        template_key: Kullanılacak şablon
+        custom_template: Özel şablon
         
     Returns:
-        Personalized message string
+        Hazır mesaj metni
     """
     generator = MessageGenerator(template_key)
     
@@ -207,15 +200,14 @@ def generate_personalized_message(
     return generator.generate(alumni)
 
 
-# =============================================================================
-# STANDALONE TESTING
-# =============================================================================
+
+# ---------- BAĞIMSIZ TEST  ----------
 
 if __name__ == "__main__":
-    print("Testing Message Generator...")
+    print("Mesaj Oluşturucu Test Ediliyor...")
     print("-" * 50)
     
-    # Sample alumni data
+    # Örnek mezun verisi
     test_alumni = {
         "name": "Ahmet Yılmaz",
         "linkedin_url": "https://linkedin.com/in/ahmetyilmaz",
@@ -226,7 +218,7 @@ if __name__ == "__main__":
     
     generator = MessageGenerator("tr_formal")
     
-    print("\nAvailable templates:")
+    print("\nMevcut Şablonlar:")
     for key, desc in MessageGenerator.list_templates().items():
         print(f"  - {key}: {desc}")
     
