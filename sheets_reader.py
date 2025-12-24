@@ -1,8 +1,3 @@
-"""
-Google Sheets integration module for MÜDEK Alumni Survey System.
-Handles reading alumni data and updating status columns.
-"""
-
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from typing import List, Dict, Optional
@@ -14,16 +9,11 @@ logger = setup_logger(__name__)
 
 class GoogleSheetsReader:
     """
-    Handles all Google Sheets operations for alumni data management.
+    Mezun veri yönetimi için tüm Google E-Tablolar işlemlerini yürütür.
     """
     
     def __init__(self, credentials_path: Optional[str] = None):
-        """
-        Initialize the Google Sheets client.
-        
-        Args:
-            credentials_path: Path to the service account JSON file
-        """
+        # Google E-Tablolar istemcisini başlatır.
         self.credentials_path = credentials_path or config.CREDENTIALS_PATH
         self.client = None
         self.spreadsheet = None
@@ -31,7 +21,7 @@ class GoogleSheetsReader:
         self._connect()
     
     def _connect(self):
-        """Establishes connection to Google Sheets API."""
+        # Google Sheets API ile bağlantı kurar.
         try:
             scope = [
                 "https://spreadsheets.google.com/feeds",
@@ -44,13 +34,13 @@ class GoogleSheetsReader:
             )
             
             self.client = gspread.authorize(credentials)
-            logger.info("Successfully connected to Google Sheets API")
+            logger.info("Google Sheets API'ye başarıyla bağlanıldı")
             
         except FileNotFoundError:
-            logger.error(f"Credentials file not found: {self.credentials_path}")
+            logger.error(f"Kimlik doğrulama dosyası bulunamadı: {self.credentials_path}")
             raise
         except Exception as e:
-            logger.error(f"Failed to connect to Google Sheets: {e}")
+            logger.error(f"Google Sheets'e bağlanılamadı: {e}")
             raise
     
     def open_spreadsheet(
@@ -58,68 +48,58 @@ class GoogleSheetsReader:
         spreadsheet_name: Optional[str] = None,
         worksheet_name: Optional[str] = None
     ):
-        """
-        Opens the specified spreadsheet and worksheet.
-        
-        Args:
-            spreadsheet_name: Name of the Google Spreadsheet
-            worksheet_name: Name of the worksheet tab
-        """
+        # Belirtilen e-tabloyu ve çalışma sayfasını açar.
         spreadsheet_name = spreadsheet_name or config.SPREADSHEET_NAME
         worksheet_name = worksheet_name or config.WORKSHEET_NAME
         
         try:
             self.spreadsheet = self.client.open(spreadsheet_name)
             self.worksheet = self.spreadsheet.worksheet(worksheet_name)
-            logger.info(f"Opened spreadsheet: {spreadsheet_name}/{worksheet_name}")
+            logger.info(f"E-Tablo açıldı: {spreadsheet_name}/{worksheet_name}")
             
         except gspread.SpreadsheetNotFound:
-            logger.error(f"Spreadsheet not found: {spreadsheet_name}")
-            logger.info("Make sure to share the spreadsheet with your service account email")
+            logger.error(f"E-Tablo bulunamadı: {spreadsheet_name}")
+            logger.info("E-tabloyu servis hesabı e-postasıyla paylaştığınızdan emin olun")
             raise
         except gspread.WorksheetNotFound:
-            logger.error(f"Worksheet not found: {worksheet_name}")
+            logger.error(f"Çalışma sayfası bulunamadı: {worksheet_name}")
             raise
     
     def get_all_alumni(self) -> List[Dict]:
         """
-        Retrieves all alumni records from the worksheet.
-        
-        Returns:
-            List of dictionaries containing alumni data
+        Çalışma sayfasındaki tüm mezun kayıtlarını çeker.
         """
         if not self.worksheet:
             self.open_spreadsheet()
         
         try:
-            # Get all records
+            # Tüm kayıtları al
             records = self.worksheet.get_all_records()
             
-            # Normalize column names using config mapping
+            # Config eşleşmelerini kullanarak sütun isimlerini standartlaştır
             normalized_records = []
-            for record in records:
+            
+            # --- enumerate ile sıra numarasını alıyoruz ---
+            for i, record in enumerate(records):
                 normalized = {}
                 for key, sheet_column in config.COLUMN_MAPPING.items():
                     normalized[key] = record.get(sheet_column, "")
                 
-                # Keep original data as well
+                # Orijinal veri ve SATIR NUMARASINI kaydet
                 normalized["_original"] = record
+                normalized["_row_num"] = i  
+                
                 normalized_records.append(normalized)
             
-            logger.info(f"Retrieved {len(normalized_records)} alumni records")
+            logger.info(f"{len(normalized_records)} adet mezun kaydı çekildi")
             return normalized_records
             
         except Exception as e:
-            logger.error(f"Failed to retrieve alumni data: {e}")
+            logger.error(f"Mezun verileri alınırken hata oluştu: {e}")
             raise
     
     def get_pending_alumni(self) -> List[Dict]:
-        """
-        Retrieves only alumni with pending status.
-        
-        Returns:
-            List of alumni dictionaries with pending status
-        """
+        # Sadece 'beklemede' (işlem yapılmamış) durumundaki mezunları getirir.
         all_alumni = self.get_all_alumni()
         
         pending = [
@@ -127,48 +107,33 @@ class GoogleSheetsReader:
             if alumni.get("status", "").strip() in ["", config.STATUS_PENDING]
         ]
         
-        logger.info(f"Found {len(pending)} pending alumni records")
+        logger.info(f"{len(pending)} adet beklemede olan mezun kaydı bulundu")
         return pending
     
     def update_status(self, row_index: int, status: str, notes: str = ""):
-        """
-        Updates the status column for a specific alumni.
-        
-        Args:
-            row_index: Row index in the spreadsheet (1-based, excluding header)
-            status: New status value
-            notes: Optional notes to add
-        """
+        # Belirli bir mezun için durum sütununu günceller.
         if not self.worksheet:
             self.open_spreadsheet()
         
         try:
-            # Find the status column
+            # Durum sütununu bul
             headers = self.worksheet.row_values(1)
             status_col_name = config.COLUMN_MAPPING.get("status", "Durum")
             
             if status_col_name in headers:
                 status_col = headers.index(status_col_name) + 1
-                # Row index + 2 (1 for 0-based to 1-based, 1 for header row)
+                # Satır indeksi + 2 (0-tabanlıdan 1-tabanlıya geçiş + başlık satırı)
                 actual_row = row_index + 2
                 self.worksheet.update_cell(actual_row, status_col, status)
-                logger.debug(f"Updated row {actual_row} status to: {status}")
+                logger.debug(f"{actual_row}. satır durumu güncellendi: {status}")
             else:
-                logger.warning(f"Status column '{status_col_name}' not found")
+                logger.warning(f"Durum sütunu '{status_col_name}' bulunamadı")
                 
         except Exception as e:
-            logger.error(f"Failed to update status: {e}")
+            logger.error(f"Durum güncelleme hatası: {e}")
     
     def find_alumni_row(self, linkedin_url: str) -> Optional[int]:
-        """
-        Finds the row index of an alumni by their LinkedIn URL.
-        
-        Args:
-            linkedin_url: LinkedIn profile URL to search
-            
-        Returns:
-            Row index (0-based) or None if not found
-        """
+        # LinkedIn URL'sine göre bir mezunun satır numarasını bulur.
         if not self.worksheet:
             self.open_spreadsheet()
         
@@ -180,31 +145,19 @@ class GoogleSheetsReader:
                 col_index = headers.index(url_column) + 1
                 cell = self.worksheet.find(linkedin_url, in_column=col_index)
                 if cell:
-                    return cell.row - 2  # Convert to 0-based, account for header
-            
+                    return cell.row - 2  # 0-tabanlı indekse çevir
             return None
             
         except Exception as e:
-            logger.error(f"Error finding alumni row: {e}")
+            logger.error(f"Mezun satırı bulma hatası: {e}")
             return None
-
 
 def get_alumni_data(
     spreadsheet_name: Optional[str] = None,
     worksheet_name: Optional[str] = None,
     only_pending: bool = True
 ) -> List[Dict]:
-    """
-    Convenience function to get alumni data.
-    
-    Args:
-        spreadsheet_name: Name of the spreadsheet
-        worksheet_name: Name of the worksheet
-        only_pending: If True, only return pending records
-        
-    Returns:
-        List of alumni dictionaries
-    """
+    # Mezun verilerini almak için yardımcı fonksiyon.
     reader = GoogleSheetsReader()
     reader.open_spreadsheet(spreadsheet_name, worksheet_name)
     
@@ -213,27 +166,19 @@ def get_alumni_data(
     else:
         return reader.get_all_alumni()
 
-
-# =============================================================================
-# STANDALONE TESTING
-# =============================================================================
-
 if __name__ == "__main__":
-    print("Testing Google Sheets Connection...")
+    print("Google E-Tablolar Bağlantısı Test Ediliyor...")
     print("-" * 50)
-    
     try:
         reader = GoogleSheetsReader()
         reader.open_spreadsheet()
-        
         alumni = reader.get_all_alumni()
-        print(f"\n✅ Successfully retrieved {len(alumni)} records")
-        
+        print(f"\n✅ {len(alumni)} adet kayıt başarıyla çekildi")
         if alumni:
-            print("\nFirst record sample:")
+            print("\nİlk kayıt örneği:")
+            print(f"  Satır Numarası: {alumni[0].get('_row_num')}")
             for key, value in alumni[0].items():
-                if key != "_original":
+                if key not in ["_original", "_row_num"]:
                     print(f"  {key}: {value}")
-                    
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n❌ Hata: {e}")

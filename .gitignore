@@ -1,6 +1,5 @@
+credentials.json
+bot_chrome_data/
+logs/
 __pycache__/
 .DS_Store
-venv/
-env/
-.venv/
-.vscode/
