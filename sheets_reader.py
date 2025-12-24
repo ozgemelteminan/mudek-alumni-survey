@@ -18,12 +18,7 @@ class GoogleSheetsReader:
     """
     
     def __init__(self, credentials_path: Optional[str] = None):
-        """
-        Initialize the Google Sheets client.
-        
-        Args:
-            credentials_path: Path to the service account JSON file
-        """
+        """Initialize the Google Sheets client."""
         self.credentials_path = credentials_path or config.CREDENTIALS_PATH
         self.client = None
         self.spreadsheet = None
@@ -58,13 +53,7 @@ class GoogleSheetsReader:
         spreadsheet_name: Optional[str] = None,
         worksheet_name: Optional[str] = None
     ):
-        """
-        Opens the specified spreadsheet and worksheet.
-        
-        Args:
-            spreadsheet_name: Name of the Google Spreadsheet
-            worksheet_name: Name of the worksheet tab
-        """
+        """Opens the specified spreadsheet and worksheet."""
         spreadsheet_name = spreadsheet_name or config.SPREADSHEET_NAME
         worksheet_name = worksheet_name or config.WORKSHEET_NAME
         
@@ -84,9 +73,6 @@ class GoogleSheetsReader:
     def get_all_alumni(self) -> List[Dict]:
         """
         Retrieves all alumni records from the worksheet.
-        
-        Returns:
-            List of dictionaries containing alumni data
         """
         if not self.worksheet:
             self.open_spreadsheet()
@@ -97,13 +83,17 @@ class GoogleSheetsReader:
             
             # Normalize column names using config mapping
             normalized_records = []
-            for record in records:
+            
+            # --- DÜZELTME BURADA: enumerate ile sıra numarasını alıyoruz ---
+            for i, record in enumerate(records):
                 normalized = {}
                 for key, sheet_column in config.COLUMN_MAPPING.items():
                     normalized[key] = record.get(sheet_column, "")
                 
-                # Keep original data as well
+                # Orijinal veri ve SATIR NUMARASINI kaydet
                 normalized["_original"] = record
+                normalized["_row_num"] = i  # Kritik ekleme bu!
+                
                 normalized_records.append(normalized)
             
             logger.info(f"Retrieved {len(normalized_records)} alumni records")
@@ -114,12 +104,7 @@ class GoogleSheetsReader:
             raise
     
     def get_pending_alumni(self) -> List[Dict]:
-        """
-        Retrieves only alumni with pending status.
-        
-        Returns:
-            List of alumni dictionaries with pending status
-        """
+        """Retrieves only alumni with pending status."""
         all_alumni = self.get_all_alumni()
         
         pending = [
@@ -131,14 +116,7 @@ class GoogleSheetsReader:
         return pending
     
     def update_status(self, row_index: int, status: str, notes: str = ""):
-        """
-        Updates the status column for a specific alumni.
-        
-        Args:
-            row_index: Row index in the spreadsheet (1-based, excluding header)
-            status: New status value
-            notes: Optional notes to add
-        """
+        """Updates the status column for a specific alumni."""
         if not self.worksheet:
             self.open_spreadsheet()
         
@@ -160,15 +138,7 @@ class GoogleSheetsReader:
             logger.error(f"Failed to update status: {e}")
     
     def find_alumni_row(self, linkedin_url: str) -> Optional[int]:
-        """
-        Finds the row index of an alumni by their LinkedIn URL.
-        
-        Args:
-            linkedin_url: LinkedIn profile URL to search
-            
-        Returns:
-            Row index (0-based) or None if not found
-        """
+        """Finds the row index of an alumni by their LinkedIn URL."""
         if not self.worksheet:
             self.open_spreadsheet()
         
@@ -180,31 +150,19 @@ class GoogleSheetsReader:
                 col_index = headers.index(url_column) + 1
                 cell = self.worksheet.find(linkedin_url, in_column=col_index)
                 if cell:
-                    return cell.row - 2  # Convert to 0-based, account for header
-            
+                    return cell.row - 2  # Convert to 0-based
             return None
             
         except Exception as e:
             logger.error(f"Error finding alumni row: {e}")
             return None
 
-
 def get_alumni_data(
     spreadsheet_name: Optional[str] = None,
     worksheet_name: Optional[str] = None,
     only_pending: bool = True
 ) -> List[Dict]:
-    """
-    Convenience function to get alumni data.
-    
-    Args:
-        spreadsheet_name: Name of the spreadsheet
-        worksheet_name: Name of the worksheet
-        only_pending: If True, only return pending records
-        
-    Returns:
-        List of alumni dictionaries
-    """
+    """Convenience function to get alumni data."""
     reader = GoogleSheetsReader()
     reader.open_spreadsheet(spreadsheet_name, worksheet_name)
     
@@ -213,27 +171,19 @@ def get_alumni_data(
     else:
         return reader.get_all_alumni()
 
-
-# =============================================================================
-# STANDALONE TESTING
-# =============================================================================
-
 if __name__ == "__main__":
     print("Testing Google Sheets Connection...")
     print("-" * 50)
-    
     try:
         reader = GoogleSheetsReader()
         reader.open_spreadsheet()
-        
         alumni = reader.get_all_alumni()
         print(f"\n✅ Successfully retrieved {len(alumni)} records")
-        
         if alumni:
             print("\nFirst record sample:")
+            print(f"  Row Number: {alumni[0].get('_row_num')}")
             for key, value in alumni[0].items():
-                if key != "_original":
+                if key not in ["_original", "_row_num"]:
                     print(f"  {key}: {value}")
-                    
     except Exception as e:
         print(f"\n❌ Error: {e}")
