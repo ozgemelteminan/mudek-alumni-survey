@@ -1,9 +1,14 @@
+"""
+LinkedIn Automation - AGGRESSIVE CLEANUP & NAME MATCHING
+"""
 import time
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import TimeoutException, StaleElementReferenceException
 import config
 from logger_utils import setup_logger
 
@@ -11,15 +16,17 @@ logger = setup_logger(__name__)
 
 # --- SELECTORLAR ---
 SELECTORS = {
-    # 1. Ana Mavi Buton
-    "primary_message_button": [
-        "//span[text()='Mesaj gönder']",
-        "//button[contains(., 'Mesaj gönder')]",
-        "//span[text()='Mesaj']",
-        "//button[contains(@class, 'message-anywhere-button')]",
-        "//div[contains(@class, 'pv-top-card')]//button"
+    "profile_name_h1": [
+        "//h1[contains(@class, 'text-heading-xlarge')]",
+        "//div[contains(@class, 'ph5')]//h1",
+        "//h1"
     ],
-    # 2. Popup Kapatıcılar
+    "primary_message_button": [
+        "//main//button[contains(@class, 'message-anywhere-button')]",
+        "//span[text()='Mesaj gönder']",
+        "//span[text()='Mesaj']",
+        "//button[contains(., 'Mesaj')]"
+    ],
     "popup_close_buttons": [
         "//button[@aria-label='Dismiss']",
         "//button[@aria-label='Kapat']",
@@ -27,28 +34,22 @@ SELECTORS = {
         "//button[@aria-label='Close']",
         "//svg[@data-test-icon='close-medium']/ancestor::button"
     ],
-    # 3. Daha Fazla Menüsü
-    "more_button": [
-        "//button[contains(@aria-label, 'Daha Fazla')]",
-        "//button[contains(@aria-label, 'More actions')]",
-        "//span[text()='Daha Fazla']"
+    # Sohbet Kapatma 
+    "chat_close_buttons": [
+        # Standart kapatma butonu
+        "//button[contains(@class, 'msg-overlay-bubble-header__control--close-btn')]",
+        # İkon üzerinden bulma
+        "//svg[@data-test-icon='close-small']/ancestor::button",
+        # Header içindeki son buton
+        "//header[contains(@class, 'msg-overlay-bubble-header')]//button[last()]"
     ],
-    "menu_message_option": [
-        "//div[contains(@class, 'artdeco-dropdown__content')]//span[contains(text(), 'Mesaj gönder')]",
-        "//div[contains(@class, 'artdeco-dropdown__content')]//div[contains(text(), 'Mesaj')]"
-    ],
-    # 4. Sohbet Elemanları
     "message_textbox": [
         "div.msg-form__contenteditable[role='textbox']",
         "div[role='textbox']"
     ],
     "send_button": [
-        "//button[@type='submit' and not(@disabled)]", # Sadece aktif butonlar
-        "//button[contains(@class, 'msg-form__send-button')]",
-        "//button[text()='Gönder']"
-    ],
-    "close_chat": [
-        "//button[contains(@class, 'msg-overlay-bubble-header__control--close-btn')]"
+        "//button[@type='submit']",
+        "//button[contains(@class, 'msg-form__send-button')]"
     ]
 }
 
@@ -70,7 +71,7 @@ class LinkedInAutomation:
         options.add_argument(f"--window-size={config.BROWSER_WIDTH},{config.BROWSER_HEIGHT}")
         
         self.driver = webdriver.Chrome(options=options)
-        self.wait = WebDriverWait(self.driver, 10)
+        self.wait = WebDriverWait(self.driver, 8)
 
     def check_login_status(self):
         try:
@@ -79,11 +80,38 @@ class LinkedInAutomation:
             return "login" not in self.driver.current_url
         except: return False
 
-    def force_click(self, element):
+    def safe_click(self, element):
         try:
-            self.driver.execute_script("arguments[0].click();", element)
-        except:
+            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+            time.sleep(0.3)
             element.click()
+        except:
+            try:
+                self.driver.execute_script("arguments[0].click();", element)
+            except: pass
+
+    def nuke_all_chats(self):
+        """
+        Ekranda ne kadar sohbet penceresi varsa hepsini kapatır.
+        """
+        logger.info("🧹 Temizlik başlıyor: Tüm sohbetler kapatılıyor...")
+        max_attempts = 5 # Sonsuz döngüye girmesin
+        for _ in range(max_attempts):
+            found_any = False
+            for xpath in SELECTORS["chat_close_buttons"]:
+                try:
+                    buttons = self.driver.find_elements(By.XPATH, xpath)
+                    for btn in buttons:
+                        if btn.is_displayed():
+                            self.safe_click(btn)
+                            found_any = True
+                            time.sleep(0.3) # Animasyon bekle
+                except: pass
+            
+            if not found_any:
+                break # Hiç buton kalmadıysa döngüyü kır
+        
+        time.sleep(1) # Emin olmak için bekle
 
     def handle_popups(self):
         try:
@@ -91,19 +119,39 @@ class LinkedInAutomation:
                 elements = self.driver.find_elements(By.XPATH, xpath)
                 for el in elements:
                     if el.is_displayed():
-                        logger.info("🧹 Popup temizleniyor...")
-                        self.force_click(el)
-                        time.sleep(1)
+                        self.safe_click(el)
+                        time.sleep(0.5)
         except: pass
+
+    def get_first_name(self):
+        """Profildeki H1 başlığından ilk ismi alır."""
+        try:
+            for xpath in SELECTORS["profile_name_h1"]:
+                elements = self.driver.find_elements(By.XPATH, xpath)
+                if elements:
+                    full_name = elements[0].text.strip()
+                    return full_name.split()[0] 
+            return None
+        except: return None
 
     def send_message_fast(self, url, message):
         try:
+            # ADIM 0: ÖNCEKİ PİSLİKLERİ TEMİZLE
+            self.nuke_all_chats()
+
             logger.info(f"Profil açılıyor: {url}")
             self.driver.get(url)
-            time.sleep(4) 
+            time.sleep(5)
+            
+            # ADIM 0.5: SAYFA YÜKLENİNCE TEKRAR TEMİZLE (Otomatik açılan varsa)
             self.handle_popups()
+            self.nuke_all_chats()
 
-            # --- ADIM 1: BUTONA TIKLA ---
+            # Profil ismini al (Doğrulama için)
+            target_name = self.get_first_name()
+            logger.info(f"Hedef Kişi: {target_name}")
+
+            # ADIM 1: MESAJ BUTONUNA TIKLA
             msg_btn = None
             for xpath in SELECTORS["primary_message_button"]:
                 try:
@@ -116,64 +164,76 @@ class LinkedInAutomation:
                 except: continue
             
             if msg_btn:
-                logger.info(f"✅ Buton bulundu, tıklanıyor...")
-                self.force_click(msg_btn)
-                time.sleep(2)
+                logger.info("✅ Profildeki Mesaj butonuna tıklanıyor...")
+                self.safe_click(msg_btn)
+                time.sleep(3) 
             else:
                 logger.error("❌ Mesaj butonu bulunamadı.")
                 return 'error'
 
-            # --- ADIM 2: SOHBET KUTUSU ---
+            # ADIM 2: DOĞRU KUTUYU BUL (İSİM EŞLEŞTİRME)
+            # Sadece başlığında hedefin ismi geçen kutuyu arıyoruz
             textbox = None
             try:
-                textbox = self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, SELECTORS["message_textbox"][0])))
+                if target_name:
+                    # Başlığında isim geçen pencerenin içindeki textbox
+                    target_xpath = f"//div[contains(@class, 'msg-overlay-conversation-bubble') and .//h2[contains(., '{target_name}')]]//div[@role='textbox']"
+                    textbox = self.driver.find_element(By.XPATH, target_xpath)
+                    logger.info(f"🎯 {target_name} için doğru kutu bulundu.")
+                else:
+                    # İsim alamazsak aktif elementi dene
+                    textbox = self.driver.switch_to.active_element
             except:
-                self.handle_popups() # popup kontrolü
+                # Bulamazsa genel arama yap ve sonuncuyu (en yeniyi) al
                 try:
-                    self.force_click(msg_btn) # Tekrar dene
-                    time.sleep(2)
-                    textbox = self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, SELECTORS["message_textbox"][0])))
-                except:
-                    logger.error("❌ Sohbet kutusu açılmadı.")
-                    return 'error'
+                    all_boxes = self.driver.find_elements(By.CSS_SELECTOR, "div[role='textbox']")
+                    visible_boxes = [b for b in all_boxes if b.is_displayed()]
+                    if visible_boxes:
+                        textbox = visible_boxes[0] # LinkedIn yeni pencereyi genelde ilk sıraya (sola) koyar umarım yani??
+                        logger.warning("⚠️ İsimle bulunamadı, ilk sıradaki kutu seçildi.")
+                except: pass
 
-            # --- ADIM 3: YAZ VE GÖNDER ---
+            if not textbox:
+                logger.error("❌ Sohbet kutusu bulunamadı/açılmadı.")
+                return 'error'
+
+            # Kutuya tıkla
+            self.safe_click(textbox)
+            time.sleep(0.5)
+
+            # ADIM 3: YAZ VE TETİKLE
             logger.info("Mesaj yazılıyor...")
             textbox.clear()
             textbox.send_keys(message)
-            time.sleep(1) 
+            time.sleep(0.5)
+            # Tetikleyici (Trigger)
+            textbox.send_keys(" ") 
+            textbox.send_keys(Keys.BACKSPACE)
+            time.sleep(1)
 
-            # Gönder butonunu bul
-            send_btn = None
-            for xpath in SELECTORS["send_button"]:
-                try:
-                    elements = self.driver.find_elements(By.XPATH, xpath)
-                    for btn in elements:
-                        # Hem görünür hem de aktif (disabled değil) olmalı
-                        if btn.is_displayed() and btn.is_enabled():
-                            send_btn = btn
-                            break
-                    if send_btn: break
-                except: continue
-            
-            if send_btn:
-                logger.info("📤 Gönder butonuna basılıyor...")
-                self.force_click(send_btn)
-                time.sleep(2)
+            # ADIM 4: GÖNDER (FORM İÇİ BUTON)
+            # Textbox'ın bağlı olduğu formu bul, onun butonuna bas
+            try:
+                parent_form = textbox.find_element(By.XPATH, "./ancestor::form")
+                send_btn = parent_form.find_element(By.XPATH, ".//button[@type='submit']")
                 
-                # Sohbeti kapat
-                try:
-                    close = self.driver.find_element(By.XPATH, SELECTORS["close_chat"][0])
-                    self.force_click(close)
-                except: pass
-                
-                return 'sent'
-            else:
-                logger.error("❌ Gönder butonu aktif olmadı (Gri kaldı).")
+                if send_btn and send_btn.is_enabled():
+                    logger.info("📤 Gönderiliyor...")
+                    self.safe_click(send_btn)
+                    time.sleep(2)
+                    
+                    # İŞLEM BİTİNCE KAPAT (Temizlik)
+                    self.nuke_all_chats()
+                    return 'sent'
+                else:
+                    logger.error("❌ Gönder butonu aktif değil.")
+                    return 'error'
+            except:
+                logger.error("❌ Form butonu bulunamadı.")
                 return 'error'
 
         except Exception as e:
-            logger.error(f"Beklenmeyen Hata: {e}")
+            logger.error(f"Hata: {e}")
             return 'error'
 
     def close(self):
