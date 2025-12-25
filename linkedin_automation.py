@@ -34,7 +34,7 @@ SELECTORS = {
         "//button[@aria-label='Close']",
         "//svg[@data-test-icon='close-medium']/ancestor::button"
     ],
-    # Sohbet Kapatma (Çoklu Seçenek)
+    # Sohbet Kapatma 
     "chat_close_buttons": [
         # Standart kapatma butonu
         "//button[contains(@class, 'msg-overlay-bubble-header__control--close-btn')]",
@@ -81,7 +81,6 @@ class LinkedInAutomation:
         except: return False
 
     def safe_click(self, element):
-        """Elemente tıklamayı garantiye alır."""
         try:
             self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
             time.sleep(0.3)
@@ -94,7 +93,6 @@ class LinkedInAutomation:
     def nuke_all_chats(self):
         """
         Ekranda ne kadar sohbet penceresi varsa hepsini kapatır.
-        Bunu 'While' döngüsü ile hiç buton kalmayana kadar yapar.
         """
         logger.info("🧹 Temizlik başlıyor: Tüm sohbetler kapatılıyor...")
         max_attempts = 5 # Sonsuz döngüye girmesin
@@ -132,7 +130,7 @@ class LinkedInAutomation:
                 elements = self.driver.find_elements(By.XPATH, xpath)
                 if elements:
                     full_name = elements[0].text.strip()
-                    return full_name.split()[0] # "Yasin"
+                    return full_name.split()[0] 
             return None
         except: return None
 
@@ -168,7 +166,7 @@ class LinkedInAutomation:
             if msg_btn:
                 logger.info("✅ Profildeki Mesaj butonuna tıklanıyor...")
                 self.safe_click(msg_btn)
-                time.sleep(3) # Pencerenin açılmasını bekle
+                time.sleep(3) 
             else:
                 logger.error("❌ Mesaj butonu bulunamadı.")
                 return 'error'
@@ -191,7 +189,7 @@ class LinkedInAutomation:
                     all_boxes = self.driver.find_elements(By.CSS_SELECTOR, "div[role='textbox']")
                     visible_boxes = [b for b in all_boxes if b.is_displayed()]
                     if visible_boxes:
-                        textbox = visible_boxes[0] # LinkedIn yeni pencereyi genelde ilk sıraya (sola) koyar
+                        textbox = visible_boxes[0] # LinkedIn yeni pencereyi genelde ilk sıraya (sola) koyar umarım yani??
                         logger.warning("⚠️ İsimle bulunamadı, ilk sıradaki kutu seçildi.")
                 except: pass
 
